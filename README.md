@@ -10,7 +10,7 @@ https://drive.google.com/drive/folders/1LDl4UHSGrTkbcmJf_oIuoOIHdlAXw5Vj?usp=dri
 Due to the large size of the model file, it can't be uploaded to GitHub, so you will need to download it from the google cloud. 
 After downloading, please put it in this path `/Count_params/HandMesh/mobrecon/out/`.
 
-If we change the model in the future, we’ll update python file. 
-Just download the new file replace the old file, and change the parameter`control` in count_parameters.py to get the new results.
+If we change the model in the future, we will update the Python file. 
+Just download the new file, replace the old one, and change the `control` parameter in count_parameters.py to obtain the new results.
 
 ![image](https://github.com/user-attachments/assets/d12a255a-1501-4a61-b4e1-c17c763767c5)
