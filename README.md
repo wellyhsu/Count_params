@@ -12,4 +12,5 @@ After downloading, please put it in this path `/Count_params/HandMesh/mobrecon/o
 
 If we change the model in the future, we’ll update python file. 
 Just download the new file replace the old file, and change the parameter`control` in count_parameters.py to get the new results.
+
 ![image](https://github.com/user-attachments/assets/d12a255a-1501-4a61-b4e1-c17c763767c5)
