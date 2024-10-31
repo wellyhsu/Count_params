@@ -18,5 +18,5 @@ Just download the new file, replace the old one, and change the `control` parame
 Example Result:
 
 ![image](https://github.com/user-attachments/assets/2d956364-cd73-4a5c-b33e-49c35dea7f5b)
-![image](https://github.com/user-attachments/assets/1111c9df-d359-4080-be69-e156f35f8615)
-![image](https://github.com/user-attachments/assets/72f041de-95e6-450d-8155-58e0523c0465)
+![image](https://github.com/user-attachments/assets/e4a50fa9-9623-401e-b66c-fb7cf60129e8)
+
