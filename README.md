@@ -16,8 +16,15 @@ Just download the new file, replace the old one, and change the `control` parame
 ![image](https://github.com/user-attachments/assets/d12a255a-1501-4a61-b4e1-c17c763767c5)
 
 Example Result:
+Mobilenet_v3: 
 
 ![Mobilenet_v3](https://github.com/user-attachments/assets/2d956364-cd73-4a5c-b33e-49c35dea7f5b)
+
+DenseStack: 
+
 ![DenseStack](https://github.com/user-attachments/assets/3ea79dc4-c129-4e56-8726-fe8cea77307d)
+
+DenseStack model detail:
+
 ![DenseStack model detail](https://github.com/user-attachments/assets/e4a50fa9-9623-401e-b66c-fb7cf60129e8)
 
