@@ -26,5 +26,6 @@ DenseStack:
 
 DenseStack model detail:
 
-![DenseStack model detail](https://github.com/user-attachments/assets/e4a50fa9-9623-401e-b66c-fb7cf60129e8)
+![DenseStack_model_detail](https://github.com/user-attachments/assets/9da1d2f5-2a40-4c45-8fe2-bbcaac9d8353)
+
 
