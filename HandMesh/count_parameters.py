@@ -77,7 +77,7 @@ cfg = setup(args)
 
 # 定義模型並傳遞 cfg
 # 選擇要計算的model版本: Densestack, mobilenet_v3
-model = MobRecon_DS(cfg, control='Densestack')
+model = MobRecon_DS(cfg, control='mobilenet_v3')
 
 # 修改 input 的大小，符合模型的輸入
 input = torch.randn(1, 6, 128, 128)
@@ -86,6 +86,7 @@ model_summary = summary(model, input_size=(1, 6, 128, 128), col_names=[ "num_par
 
 # 用來存放結果的列表
 summary_data = []
+Total_MACs = 0
 
 # 初始化全域變數
 max_params = 0
@@ -104,7 +105,6 @@ output_max_tensor_info = ""
 layers = model_summary.summary_list
 
 handle_collection=[]
-
 for layer in layers:
     inner_layers = layer.inner_layers
     layer_ids = [layer.layer_id]
@@ -115,11 +115,14 @@ for layer in layers:
 
     if layer.is_leaf_layer:
         param_count = layer.trainable_params  # 獲取參數量，使用 trainable_params
+        MACs = layer.macs
+        Total_MACs += MACs
         if param_count > max_params:
             max_params = param_count
             max_params_layer_name = layer.class_name
     else:
         param_count=0
+        MACs = 0
     input_shape = layer.input_size  # 獲取輸入大小
     output_shape = layer.output_size  # 獲取輸出大小         
 
@@ -144,7 +147,8 @@ for layer in layers:
         'Input Tensor': input_tensor_size,
         'Output Tensor': output_tensor_size,
         'Kernel Size': layer.kernel_size,
-        'Params': param_count
+        'Params': param_count,
+        'MACs': MACs
     })
     
 # 計算 FLOPs 和參數
@@ -154,8 +158,9 @@ flops, params = clever_format([flops, params], "%.3f")
 input_max_tensor_size = clever_format([input_max_tensor_size], "%.3f")
 output_max_tensor_size = clever_format([output_max_tensor_size], "%.3f")
 max_params = clever_format([max_params], "%.3f")
+Total_MACs = clever_format([Total_MACs], "%.3f")
 print("===========================================================================================================================================================")
-print(f"FLOPs: {flops}, Params: {params}")
+print(f"FLOPs: {flops}, Params: {params}, Total mult-adds: {Total_MACs}")
 print(f"最大層參數量類型: {max_params_layer_name}, 參數量: {max_params}")
 print(f"Peak input-tensor size: {input_max_tensor_size}, {input_max_tensor_info}")
 print(f"Peak output-tensor size: {output_max_tensor_size}, {output_max_tensor_info}")
