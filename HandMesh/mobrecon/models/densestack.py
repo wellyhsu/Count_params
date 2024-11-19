@@ -210,7 +210,7 @@ class DenseStack2(nn.Module):
 
 
 class DenseStack_Backnone(nn.Module):
-    def __init__(self, input_channel=128, out_channel=24, latent_size=256, kpts_num=21, pretrain=True):
+    def __init__(self, input_channel=128, out_channel=24, latent_size=256, kpts_num=21, pretrain=True, control=None):
         """Init a DenseStack
 
         Args:
@@ -221,6 +221,7 @@ class DenseStack_Backnone(nn.Module):
             pretrain (bool, optional): use pretrain weight or not. Defaults to True.
         """
         super(DenseStack_Backnone, self).__init__()
+        self.control = control  # 儲存 control 參數
         self.pre_layer = nn.Sequential(conv_layer(3, input_channel // 2, 3, 2, 1),
                                        mobile_unit(input_channel // 2, input_channel))
         self.thrink = conv_layer(input_channel * 4, input_channel)
@@ -281,18 +282,19 @@ class DenseStack_Backnone(nn.Module):
 
 
     def forward(self, x):
-        ##  Backbone is Densestack  
-        # pre_out = self.pre_layer(x)
-        # pre_out_reorg = self.reorg(pre_out)
-        # thrink = self.thrink(pre_out_reorg)
-        # stack1_out = self.dense_stack1(thrink)
-        # stack1_out_remap = self.stack1_remap(stack1_out)
-        # input2 = torch.cat((stack1_out_remap, thrink),dim=1)
-        # thrink2 = self.thrink2(input2)
-        # stack2_out, stack2_mid = self.dense_stack2(thrink2)
-        # latent = self.mid_proj(stack2_mid)
-        # uv_reg = self.uv_reg(self.reduce(stack2_out).view(stack2_out.shape[0], 21, -1))
-        # return latent, uv_reg
+        #  Backbone is Densestack 
+        if self.control == 'Densestack': 
+            pre_out = self.pre_layer(x)
+            pre_out_reorg = self.reorg(pre_out)
+            thrink = self.thrink(pre_out_reorg)
+            stack1_out = self.dense_stack1(thrink)
+            stack1_out_remap = self.stack1_remap(stack1_out)
+            input2 = torch.cat((stack1_out_remap, thrink),dim=1)
+            thrink2 = self.thrink2(input2)
+            stack2_out, stack2_mid = self.dense_stack2(thrink2)
+            latent = self.mid_proj(stack2_mid)
+            uv_reg = self.uv_reg(self.reduce(stack2_out).view(stack2_out.shape[0], 21, -1))
+            return latent, uv_reg
 
 
         # input shape: [1, 3, 128, 128]
@@ -310,13 +312,14 @@ class DenseStack_Backnone(nn.Module):
         # return latent, uv_reg
 
         # this is mobilenet version v3_small
-        mobileNetV3_output = self.backbone3(x)
-        latent = self.conv_branch3[0](mobileNetV3_output)
-        latent = self.conv_branch3[1](latent)
-        uv_reg = self.conv_branch4(mobileNetV3_output)
-        uv_reg = uv_reg.view(uv_reg.shape[0], uv_reg.shape[1], -1)
-        uv_reg = self.fc(uv_reg)
-        return latent, uv_reg
+        elif self.control == 'mobilenet_v3':
+            mobileNetV3_output = self.backbone3(x)
+            latent = self.conv_branch3[0](mobileNetV3_output)
+            latent = self.conv_branch3[1](latent)
+            uv_reg = self.conv_branch4(mobileNetV3_output)
+            uv_reg = uv_reg.view(uv_reg.shape[0], uv_reg.shape[1], -1)
+            uv_reg = self.fc(uv_reg)
+            return latent, uv_reg
 
 # 定義自訂的 block，接受 MobileNet 的輸出
 class CustomConvBlock1(nn.Module):
