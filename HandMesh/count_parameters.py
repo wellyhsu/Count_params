@@ -168,3 +168,25 @@ print(f"Peak output-tensor size: {output_max_tensor_size}, {output_max_tensor_in
 # 將結果保存為 Excel 檔案
 df = pd.DataFrame(summary_data)
 df.to_excel('model_summary_layers.xlsx', index=False)
+
+print("=============================================================================================================")
+# 提取 backbone 模組
+backbone = model.backbone
+# 為 backbone 提供正確的輸入大小
+input_backbone = torch.randn(1, 3, 128, 128)  # 根據模型的需求調整
+flops_backbone, params_backbone = profile(backbone, inputs=(input_backbone,))
+flops_backbone, params_backbone = clever_format([flops_backbone, params_backbone], "%.3f")
+
+# 提取 decoder3d 模組
+decoder3d = model.decoder3d
+# 為 decoder3d 提供正確的輸入大小（需要與 decoder3d 的 `forward` 方法一致）
+latent_size = cfg.MODEL.LATENT_SIZE
+uv = torch.randn(1, cfg.MODEL.KPTS_NUM, 2)  # 2D landmarks
+x = torch.randn(1, latent_size, 32, 32)  # 這裡假設 latent 的維度
+flops_decoder3d, params_decoder3d = profile(decoder3d, inputs=(uv, x))
+flops_decoder3d, params_decoder3d = clever_format([flops_decoder3d, params_decoder3d], "%.3f")
+
+# 打印結果
+print(f"2D decoding FLOPs: {2*flops_backbone}, Params: {params_backbone}")
+print(f"Feature lifting + 3D Decoder FLOPs: {2*flops_decoder3d}, Params: {params_decoder3d}")
+
