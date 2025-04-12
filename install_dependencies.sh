@@ -12,7 +12,7 @@ pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0+cu1
 
 # 安裝torch_geometric相關套件
 pip install torch_geometric==2.0.4
-pip install pyg_lib torch_scatter torch_sparse==0.6.13 torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-1.11.0+cu113.html && \
+pip install pyg_lib torch_scatter torch_sparse==0.6.13 torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-1.11.0+cu113.html
 
 # 安裝其他套件
 pip install torchinfo==1.8.0 thop==0.1.1.post2209072238 pandas==1.4.2 openmesh==1.2.1 \
