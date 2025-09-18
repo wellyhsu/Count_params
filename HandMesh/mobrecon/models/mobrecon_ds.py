@@ -16,11 +16,12 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import torch.nn as nn
 import torch
-from mobrecon.models.densestack import DenseStack_Backnone
+from mobrecon.models.densestack import DenseStack_Backnone, EdgeFriendlyBackbone
 from mobrecon.models.modules import Reg2DDecode3D
 from mobrecon.models.loss import l1_loss, normal_loss, edge_length_loss, contrastive_loss_3d, contrastive_loss_2d
 from utils.read import spiral_tramsform
 from conv.spiralconv import SpiralConv
+from conv.fasterspiralconv import FasterSpiralConv, fast_spiral_gather
 from conv.dsconv import DSConv
 from mobrecon.build import MODEL_REGISTRY
 
@@ -37,6 +38,7 @@ class MobRecon_DS(nn.Module):
         self.cfg = cfg
         self.backbone = DenseStack_Backnone(latent_size=cfg.MODEL.LATENT_SIZE,
                                             kpts_num=cfg.MODEL.KPTS_NUM)
+        # self.backbone = EdgeFriendlyBackbone()
         cur_dir = os.path.dirname(os.path.realpath(__file__))
         template_fp = os.path.join(cur_dir, '../../template/template.ply')
         transform_fp = os.path.join(cur_dir, '../../template', 'transform.pkl')
@@ -52,7 +54,10 @@ class MobRecon_DS(nn.Module):
                                        spiral_indices, 
                                        up_transform, 
                                        cfg.MODEL.KPTS_NUM,
-                                       meshconv=(SpiralConv, DSConv)[cfg.MODEL.SPIRAL.TYPE=='DSConv'])
+                                       meshconv=FasterSpiralConv)    # new version
+                                    #    meshconv=SpiralConv) 
+                                        # meshconv=DSConv)               # our benchmark
+                                    #    meshconv=(SpiralConv, DSConv)[cfg.MODEL.SPIRAL.TYPE=='DSConv'])
 
     def forward(self, x):
         if x.size(1) == 6:
@@ -68,7 +73,6 @@ class MobRecon_DS(nn.Module):
         else:
             latent, pred2d_pt = self.backbone(x)
             pred3d = self.decoder3d(pred2d_pt, latent)
-
         return {'verts': pred3d,
                 'joint_img': pred2d_pt
                 }

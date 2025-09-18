@@ -22,6 +22,12 @@ import torch.nn as nn
 from mobrecon.models.modules import conv_layer, mobile_unit, linear_layer, Reorg
 import os
 import numpy as np
+from thop import clever_format, profile
+from torchinfo import summary
+
+# from torchvision.models import mobilenet_v3_small, MobileNet_V3_Small_Weights
+from torchvision.models import resnet18, ResNet18_Weights
+from mobrecon.models.optimized_mobileV3 import MobileNetV3_optimized, HSwish
 
 class DenseBlock(nn.Module):
     dump_patches = True
@@ -209,8 +215,8 @@ class DenseStack2(nn.Module):
             return u3, d4
 
 
-class DenseStack_Backnone(nn.Module):
-    def __init__(self, input_channel=128, out_channel=24, latent_size=256, kpts_num=21, pretrain=True, control=None):
+class DenseStack_Backnone(nn.Module):   # load weight shape error -> pretrain=False
+    def __init__(self, input_channel=128, out_channel=24, latent_size=256, kpts_num=21, pretrain=True, active_groups: int = 1):
         """Init a DenseStack
 
         Args:
@@ -221,164 +227,183 @@ class DenseStack_Backnone(nn.Module):
             pretrain (bool, optional): use pretrain weight or not. Defaults to True.
         """
         super(DenseStack_Backnone, self).__init__()
-        self.control = control  # 儲存 control 參數
-        self.pre_layer = nn.Sequential(conv_layer(3, input_channel // 2, 3, 2, 1),
-                                       mobile_unit(input_channel // 2, input_channel))
-        self.thrink = conv_layer(input_channel * 4, input_channel)
-        self.dense_stack1 = DenseStack(input_channel, out_channel)
-        self.stack1_remap = conv_layer(out_channel, out_channel)
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        # # # =====================================================
+        # # mobileNetV3 Optimized
+        # # # =====================================================
+        # self.mobilenetv3_optimized = MobileNetV3_optimized(active_groups=active_groups)
+        # self.conv_branch3 = nn.Sequential(
+        #     nn.Conv2d(576, 512, 3, stride=1, padding=1, bias=False),
+        #     nn.BatchNorm2d(512),
+        #     HSwish(inplace=True),
+        #     nn.Conv2d(512, 256, 3, stride=1, padding=1, bias=False),
+        #     nn.BatchNorm2d(256),
+        #     HSwish(inplace=True)
+        # )
+        # self.conv_branch4 = nn.Sequential(
+        #     nn.Conv2d(576, 512, 3, stride=1, padding=1, bias=False),
+        #     nn.BatchNorm2d(512),
+        #     HSwish(inplace=True),
+        #     nn.Conv2d(512, 256, 3, stride=2, padding=1, bias=False),
+        #     nn.BatchNorm2d(256),
+        #     HSwish(inplace=True),
+        #     nn.Conv2d(256, 21, 1, stride=1, bias=False)
+        # )
+        # # self.fc = nn.Linear(21 * 2 * 2, 21 * 2) # 1344x84 or 
+        # self.fc = nn.Linear(4, 2)
 
-        self.thrink2 = conv_layer((out_channel + input_channel), input_channel)
-        self.dense_stack2 = DenseStack2(input_channel, out_channel, final_upsample=False)
-        self.mid_proj = conv_layer(1024, latent_size, 1, 1, 0, bias=False, bn=False, relu=False)
-        self.reduce = conv_layer(out_channel, kpts_num, 1, bn=False, relu=False)
-        self.uv_reg = nn.Sequential(linear_layer(latent_size, 128, bn=False), linear_layer(128, 64, bn=False),
-                                    linear_layer(64, 2, bn=False, relu=False))
-        self.reorg = Reorg()
-        if pretrain:
-            cur_dir = os.path.dirname(os.path.realpath(__file__))
-            weight = torch.load(os.path.join(cur_dir, '../out/densestack.pth'))
-            self.load_state_dict(weight, strict=False)
-            print('Load pre-trained weight: densestack.pth')
-        mobile_netv2 = torch.hub.load('pytorch/vision:v0.10.0', 'mobilenet_v2', pretrained=True)
-        self.backbone2 = mobile_netv2.features
-        mobilenet_v3_small = models.mobilenet_v3_small(pretrained=True)
-        self.backbone3 = mobilenet_v3_small.features
+        # # # =====================================================
+        # # mobileNetV3
+        # # # =====================================================
+        # mm = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
+        # self.mobilenetv3 = mm.features
+        # self.conv_branch3 = nn.Sequential(
+        #     nn.Conv2d(576, 512, kernel_size=3, stride=1, padding=1),  # Change 576 to 256
+        #     nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1)
+        # )
+        # # Adjusting the second convolutional branch input channels
+        # self.conv_branch4 = nn.Sequential(
+        #     nn.Conv2d(576, 512, kernel_size=3, stride=1, padding=1),
+        #     nn.Conv2d(512, 256, kernel_size=3, stride=2, padding=1),
+        #     nn.Conv2d(256, 21, kernel_size=1, stride=1),
+        # )
+        # self.fc = nn.Linear(4,2) # for mobileNet V3 small and Densestack
 
-        # mobilenet v2
-        # 第一個分支
-        self.conv_branch1 = nn.Sequential(
-            nn.Conv2d(1280, 512, kernel_size=3, stride=1, padding=1),  # (64, 512, 4, 4)
-            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),   # (64, 256, 4, 4)
-        )
-        
-        # 第二個分支：將空間維度進一步減少，最終輸出 (64, 21, 2)
-        self.conv_branch2 = nn.Sequential(
-            nn.Conv2d(1280, 512, kernel_size=3, stride=2, padding=1),  # (64, 512, 2, 2)
-            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),   # (64, 256, 2, 2)
-            nn.Conv2d(256, 21, kernel_size=2, stride=1),               # (64, 21, 1, 1)
-            nn.Flatten(),
-            
-        )
-        self.fc = nn.Linear(21, 21 * 2)
-        # 替换 MobileNet 中的第一个卷积层
-        # mobile_net.features[0][0] = self.new_first_layer
-        # mobilenet v3
+        # ====================================
+        # Convert mobilenet_v3_small to Res18
+        # Convert mobilenet_v3_small to Res18
+        # Convert mobilenet_v3_small to Res18
+        # ====================================
+        mm = resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.resnet18 = nn.Sequential(*list(mm.children())[:-2])  # 移除 ResNet 最後的全連接層
+        # 調整輸入通道數量為 ResNet-18 最後一層輸出的 512
         self.conv_branch3 = nn.Sequential(
-            nn.Conv2d(576, 512, kernel_size=3, stride=1, padding=1),  # Change 576 to 256
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1)
         )
-        
-        # Adjusting the second convolutional branch input channels
         self.conv_branch4 = nn.Sequential(
-            nn.Conv2d(576, 512, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.Conv2d(512, 256, kernel_size=3, stride=2, padding=1),
             nn.Conv2d(256, 21, kernel_size=1, stride=1),
         )
-        self.fc = nn.Linear(4,2) # for mobileNet V3 small and Densestack
-        # self.fc = nn.Linear(21,42) # for mobileNetV2
-
-
+        self.fc = nn.Linear(4,2) 
 
     def forward(self, x):
-        #  Backbone is Densestack 
-        if self.control == 'Densestack': 
-            pre_out = self.pre_layer(x)
-            pre_out_reorg = self.reorg(pre_out)
-            thrink = self.thrink(pre_out_reorg)
-            stack1_out = self.dense_stack1(thrink)
-            stack1_out_remap = self.stack1_remap(stack1_out)
-            input2 = torch.cat((stack1_out_remap, thrink),dim=1)
-            thrink2 = self.thrink2(input2)
-            stack2_out, stack2_mid = self.dense_stack2(thrink2)
-            latent = self.mid_proj(stack2_mid)
-            uv_reg = self.uv_reg(self.reduce(stack2_out).view(stack2_out.shape[0], 21, -1))
-            return latent, uv_reg
 
-
-        # input shape: [1, 3, 128, 128]
-        # latent shape:[1, 256, 4, 4]
-        # uv_reg shape :[1, 21, 2] 
-
-        # Backbone is mobilenet version 2
-        # mobileNetV2_output = self.backbone2(x)
-        # latent = self.conv_branch1[0](mobileNetV2_output)
-        # latent = self.conv_branch1[1](latent)
-        # uv_reg = self.conv_branch2(mobileNetV2_output)
-        # uv_reg = self.fc(uv_reg)
-        # uv_reg = uv_reg.view(x.size(0), 21, 2)
+        # # print("000000000000000000000000000000000000000print shape:")
+        # # # =====================================================
+        # # mobileNetV3 Optimized
+        # # # =====================================================
+        # mobileNetV3_output = self.mobilenetv3_optimized(x)  # Shape: (1, 192, 4, 4)
+        # # print(mobileNetV3_output.shape)
+        # # import pdb; pdb.set_trace()
+        # latent = self.conv_branch3(mobileNetV3_output)  # Shape: (1, 256, 4, 4)
+        # # print(latent.shape)
+        # uv_reg = self.conv_branch4(mobileNetV3_output)  # Shape: (1, 21, 2, 2)
+        # # print(uv_reg.shape)
+        # uv_reg = uv_reg.contiguous().view(uv_reg.size(0), uv_reg.size(1), -1)  # Shape: (1, 21, 4)
+        # # print(uv_reg.shape)
+        # uv_reg = self.fc(uv_reg)  # Shape: (1, 21, 2)
 
         # return latent, uv_reg
 
-        # this is mobilenet version v3_small
-        elif self.control == 'mobilenet_v3':
-            mobileNetV3_output = self.backbone3(x)
-            latent = self.conv_branch3[0](mobileNetV3_output)
-            latent = self.conv_branch3[1](latent)
-            uv_reg = self.conv_branch4(mobileNetV3_output)
-            uv_reg = uv_reg.view(uv_reg.shape[0], uv_reg.shape[1], -1)
-            uv_reg = self.fc(uv_reg)
-            return latent, uv_reg
+        # # # =====================================================
+        # # mobileNetV3
+        # # # =====================================================
+        # mobileNetV3_output = self.mobilenetv3(x)  # Shape: (1, 192, 4, 4)
+        # latent = self.conv_branch3[0](mobileNetV3_output)
+        # latent = self.conv_branch3[1](latent)
+        # uv_reg = self.conv_branch4(mobileNetV3_output)
+        # # uv_reg = uv_reg.view(uv_reg.shape[0], uv_reg.shape[1], -1)
+        # # replace "view" as "reshape" because quantized model aren't continuous 
+        # # 確保量化後的數據流不會被頻繁重新排
+        # uv_reg = uv_reg.contiguous().reshape(uv_reg.shape[0], uv_reg.shape[1], -1)
+        # uv_reg = self.fc(uv_reg)
+        # return latent, uv_reg
+    
 
-# 定義自訂的 block，接受 MobileNet 的輸出
-class CustomConvBlock1(nn.Module):
-    def __init__(self):
-        super(CustomConvBlock1, self).__init__()
-        
-        # 第一個分支：保持 (64, 1280, 4, 4)，並將通道數減少到 (64, 256, 4, 4)
-        self.conv_branch1 = nn.Sequential(
-            nn.Conv2d(1280, 512, kernel_size=3, stride=1, padding=1),  # (64, 512, 4, 4)
-            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),   # (64, 256, 4, 4)
+        # ====================================
+        # Convert mobilenet_v3_small to Res18
+        # Convert mobilenet_v3_small to Res18
+        # Convert mobilenet_v3_small to Res18
+        # ====================================
+        resnet18_output = self.resnet18(x).contiguous()
+        latent = self.conv_branch3[0](resnet18_output)
+        latent = self.conv_branch3[1](latent)
+        uv_reg = self.conv_branch4(resnet18_output)
+        # uv_reg = uv_reg.view(uv_reg.shape[0], uv_reg.shape[1], -1)
+        # replace "view" as "reshape" because quantized model aren't continuous 
+        # 確保量化後的數據流不會被頻繁重新排
+        uv_reg = uv_reg.contiguous().reshape(uv_reg.shape[0], uv_reg.shape[1], -1)
+        uv_reg = self.fc(uv_reg)
+        # print(f"uv_reg: {uv_reg.shape}")
+        # print(f"latent: {latent.shape}")
+        return latent, uv_reg
+    
+
+
+
+class EdgeFriendlyBackbone(nn.Module):
+    def __init__(self, kpts_num=21):
+        super(EdgeFriendlyBackbone, self).__init__()
+
+        def conv_bn_relu(in_c, out_c, kernel_size=3, stride=1, padding=1):
+            return nn.Sequential(
+                nn.Conv2d(in_c, out_c, kernel_size, stride, padding, bias=False),
+                nn.BatchNorm2d(out_c),
+                nn.ReLU(inplace=True)
+            )
+
+        # 通道數設定：依照規則，Ch_out=512 => Ch_in <= 48，Ch_out <= 256 => Ch_in <= 112
+        self.stage1 = nn.Sequential(
+            conv_bn_relu(3, 48),  # in: 128x128x3 -> 128x128x48
+            conv_bn_relu(48, 48),
+            nn.MaxPool2d(2)       # -> 64x64x48
         )
-        
-        # 第二個分支：將空間維度進一步減少，最終輸出 (64, 21, 2)
-        self.conv_branch2 = nn.Sequential(
-            nn.Conv2d(1280, 512, kernel_size=3, stride=2, padding=1),  # (64, 512, 2, 2)
-            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),   # (64, 256, 2, 2)
-            nn.Conv2d(256, 21, kernel_size=2, stride=1),               # (64, 21, 1, 1)
-            nn.Flatten(),
-            
+
+        self.stage2 = nn.Sequential(
+            conv_bn_relu(48, 112),
+            conv_bn_relu(112, 112),
+            nn.MaxPool2d(2)       # -> 32x32x112
         )
-        self.fc = nn.Linear(21, 21 * 2)
-        
-# if __name__ == "__main__":
-#     # x = torch.randn(64, 6, 4, 4)
-    # model = DenseStack_Backnone()
-#     # uv_reg, latent = model(x)
-#     # print(f"this is the shape {uv_reg.shape}, {latent.shape} ,{x.shape}")
-#         # 获取第一个卷积层
-#     x = torch.randn(64, 6, 128, 128)
-#     mobile_net = torch.hub.load('pytorch/vision:v0.10.0', 'mobilenet_v2', pretrained=True)
-#     mobilenet_v3_small = models.mobilenet_v3_small(pretrained=True)
-#     model3 = mobilenet_v3_small.features
-#     model2 = mobile_net.features
-#     first_conv_layer = model3[0][0]
 
-# #     # 修改第一个卷积层以接受 6 个输入通道
-#     new_first_layer = nn.Conv2d(6, first_conv_layer.out_channels, 
-#                                 kernel_size=first_conv_layer.kernel_size, 
-#                                 stride=first_conv_layer.stride, 
-#                                 padding=first_conv_layer.padding, 
-#                                 bias=first_conv_layer.bias is not None)
+        self.stage3 = nn.Sequential(
+            conv_bn_relu(112, 256),
+            conv_bn_relu(256, 256),
+            nn.MaxPool2d(2)       # -> 16x16x256
+        )
 
-#     # 将新的卷积层的权重进行初始化（你可以使用已有的权重复制，或者随机初始化）
-#     new_first_layer.weight.data[:, :3, :, :] = first_conv_layer.weight.data  # 复制前 3 个通道的权重
-#     new_first_layer.weight.data[:, 3:, :, :] = first_conv_layer.weight.data.mean(dim=1, keepdim=True)  # 随机初始化其他通道的权重
+        self.stage4 = nn.Sequential(
+            conv_bn_relu(256, 512),
+            conv_bn_relu(512, 512),
+            nn.MaxPool2d(2)       # -> 8x8x512
+        )
 
-#     # 替换 MobileNet 中的第一个卷积层
-#     model3[0][0] = new_first_layer
+        self.conv_branch3 = nn.Sequential(
+            conv_bn_relu(512, 512),
+            conv_bn_relu(512, 256),  # -> 8x8x256
+            nn.MaxPool2d(2)  # 加這行：8x8 → 4x4
+        )
 
-#     y = model3(x)
-#     print(x.shape)
-#     print(y.shape)
-    # 創建模型並運行示例
-    # 模擬 MobileNet 輸出 (64, 1280, 4, 4)
-    # x = torch.randn(64, 1280, 4, 4)
+        self.conv_branch4 = nn.Sequential(
+            conv_bn_relu(512, 256, kernel_size=3, stride=2, padding=1),  # -> 4x4x256
+            nn.Conv2d(256, kpts_num, kernel_size=1)                      # -> 4x4x21
+        )
 
-    # 創建模型並運行示例
-    # model = CustomConvBlock()
-    # conv_out1, conv_out2 = model(x)
+        # self.fc = nn.Linear(4, 2)  # for each keypoint: 4 values to 2D regression
+        self.fc = nn.Linear(16, 2)  # for each keypoint: 4 values to 2D regression
 
-    # print(conv_out1.shape)  # 應該輸出 (64, 256, 4, 4)
-    # print(conv_out2.shape)  # 應該輸出 (64, 21, 2)
+    def forward(self, x):
+        x = self.stage1(x)
+        x = self.stage2(x)
+        x = self.stage3(x)
+        x = self.stage4(x)
+
+        latent = self.conv_branch3(x)  # shape: (B, 256, 8, 8)
+
+        uv_reg = self.conv_branch4(x)  # shape: (B, 21, 4, 4)
+        uv_reg = uv_reg.contiguous().reshape(uv_reg.shape[0], uv_reg.shape[1], -1)
+        uv_reg = self.fc(uv_reg)
+
+        # print(f"uv_reg: {uv_reg.shape}")
+        # print(f"latent: {latent.shape}")
+        return latent, uv_reg
