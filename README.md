@@ -9,7 +9,7 @@ https://drive.google.com/drive/folders/1LDl4UHSGrTkbcmJf_oIuoOIHdlAXw5Vj?usp=dri
 
 Due to the large size of the model file, it can't be uploaded to GitHub, so you will need to download it from the google cloud. 
 After downloading, please put it in this path `/Count_params/HandMesh/mobrecon/out/`.
-
+<!-- 
 If we change the model in the future, we will update the Python file. 
 Just download the new file, replace the old one, and change the `control` parameter in count_parameters.py to obtain the new results.
 
@@ -27,5 +27,7 @@ DenseStack:
 DenseStack model detail:
 
 ![DenseStack_model_detail](https://github.com/user-attachments/assets/9da1d2f5-2a40-4c45-8fe2-bbcaac9d8353)
+
+這裡是註解，README 顯示時不會出現 -->
 
 
