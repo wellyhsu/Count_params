@@ -414,10 +414,10 @@ input_backbone = input_backbone.to(device)
 # 檢查模型是否運行正常
 backbone.eval()  # 切換到推論模式
 
-# avg_time, fps, p50 = benchmark_inference(backbone, input_backbone, device, warmup=10, num_tests=num_tests)
+avg_time, fps, p50 = benchmark_inference(backbone, input_backbone, device, warmup=10, num_tests=num_tests)
 
-# print(f"backbone平均推理時間: {avg_time:.6f} 秒")
-# print(f"FPS: {fps:.2f}({p50:.2f})")
+print(f"backbone平均推理時間: {avg_time:.6f} 秒")
+print(f"FPS: {fps:.2f}({p50:.2f})")
 flops_backbone, params_backbone = profile(backbone, inputs=(input_backbone,))
 flops_backbone = 2*flops_backbone
 flops_backbone, params_backbone = clever_format([flops_backbone, params_backbone], "%.3f")
@@ -440,10 +440,10 @@ x = x.to(device)
 
 # 檢查模型是否運行正常
 decoder3d.eval()  # 切換到推論模式
-# avg_time, fps, p50 = benchmark_inference(decoder3d, (uv, x), device, warmup=10, num_tests=num_tests)
+avg_time, fps, p50 = benchmark_inference(decoder3d, (uv, x), device, warmup=10, num_tests=num_tests)
 
-# print(f"Decoder平均推理時間: {avg_time:.6f} 秒")
-# print(f"FPS: {fps:.2f}({p50:.2f})")
+print(f"Decoder平均推理時間: {avg_time:.6f} 秒")
+print(f"FPS: {fps:.2f}({p50:.2f})")
 
 flops_decoder3d, params_decoder3d = profile(decoder3d, inputs=(uv, x))
 flops_decoder3d = flops_decoder3d   # 2*flops_decoder3d
@@ -453,34 +453,3 @@ flops_decoder3d, params_decoder3d = clever_format([flops_decoder3d, params_decod
 print(f"Decoder3D FLOPs: {flops_decoder3d}, Params: {params_decoder3d}")
 print(decoder3d)
 print("--------------------------------------------------------------------------------")
-
-# print("Test MobileNetv3")
-# model = MobileNetV3Backbone() # MobileNetV3_official_4()
-# model = model.to(device)
-# print("!! MobileNet_V3 !!")
-# # print(model)
-# input_backbone = input_backbone.to(device)
-# model.eval()
-# model_avg_time_per_batch = model_benchmark_inference(model, batch_sizes, num_trials=100)
-# # print(f"MobileNetv3平均推理時間: {avg_time:.6f} 秒")
-# # print(f"FPS: {fps:.2f}({p50:.2f})")
-
-# flops, params = profile(model, inputs=(input_backbone,))
-# flops, params = clever_format([flops, params], "%.3f")
-# print(f"FLOPs: {flops}, Params: {params}")
-
-# print("--------------------------------------------------------------------------------")
-# print("Test Optimized MobileNetv3")
-# model = MobileNetV3_optimized(active_groups=1)
-# model = model.to(device)
-# print("!! Optimized MobileNet_V3 !!")
-# # print(model)
-# input_backbone = input_backbone.to(device)
-# model.eval()
-# model_avg_time_per_batch = model_benchmark_inference(model, batch_sizes, num_trials=100)
-# # print(f"Optimized MobileNetv3平均推理時間: {avg_time:.6f} 秒")
-# # print(f"FPS: {fps:.2f}({p50:.2f})")
-
-# flops, params = profile(model, inputs=(input_backbone,))
-# flops, params = clever_format([flops, params], "%.3f")
-# print(f"FLOPs: {flops}, Params: {params}")
