@@ -27,21 +27,8 @@ import time
 import gc
 import statistics
 import torch.utils.benchmark as benchmark
-
-from torchvision.models import mobilenet_v3_small, MobileNet_V3_Small_Weights
 from torchvision.models import resnet18, ResNet18_Weights
-from mobrecon.models.optimized_mobileV3 import MobileNetV3_optimized, HSwish
-from mobrecon.models.mobilenetv3 import MobileNetV3_official_4
 
-class MobileNetV3Backbone(nn.Module):
-    def __init__(self, pretrained=True):
-        super().__init__()
-        weights = MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
-        self.model = mobilenet_v3_small(weights=weights)
-
-    def forward(self, x):
-        x = self.model.features(x)   # 只跑到 backbone
-        return x
 
 @MODEL_REGISTRY.register()
 class MobRecon_DS(nn.Module):
@@ -127,7 +114,9 @@ def model_benchmark_inference(model, batch_sizes, num_trials=20, after_quant=Tru
         print(f"Because not after quantization, set device back to: {device}")
         model.to(device)
         model.eval()
-    return avg_time_list
+    avg_time = sum(avg_time_list) / num_trials
+    fps = 1 / avg_time
+    return avg_time, fps
 
 def backbone_benchmark_inference(model, batch_sizes, num_trials=20, after_quant=True):
     print("\n=== (START Backbone) torch.utils.benchmark ===")
@@ -166,8 +155,9 @@ def backbone_benchmark_inference(model, batch_sizes, num_trials=20, after_quant=
                 print(f"Because not after quantization, set device back to: {device}")
                 model.to(device)
                 model.eval()
-    return avg_time_list
-
+    avg_time = sum(avg_time_list) / num_trials
+    fps = 1 / avg_time
+    return avg_time, fps
 
 def decoder3d_benchmark_inference(model, batch_sizes, num_trials=20, after_quant=True):
     print("\n=== (START Decoder3D) torch.utils.benchmark ===")
@@ -200,7 +190,9 @@ def decoder3d_benchmark_inference(model, batch_sizes, num_trials=20, after_quant
                 print(f"Because not after quantization, set device back to: {device}")
                 model.to(device)
                 model.eval()
-    return avg_time_list
+    avg_time = sum(avg_time_list) / num_trials
+    fps = 1 / avg_time
+    return avg_time, fps
 
 
 
@@ -224,12 +216,10 @@ input = input.to(device)
 # 檢查模型是否運行正常
 model.eval()  # 切換到推論模式
 batch_sizes = [1]
-model_original_avg_time_per_batch = model_benchmark_inference(model, batch_sizes, num_trials=100)
-backbone_original_avg_time_per_batch = backbone_benchmark_inference(model, batch_sizes, num_trials=100)
-decoder3d_original_median_time_per_batch = decoder3d_benchmark_inference(model, batch_sizes, num_trials=100)
 
-# print(f"平均推理時間: {avg_time:.6f} 秒")
-# print(f"FPS: {fps:.2f}({p50:.2f})")
+avg_time, fps = model_benchmark_inference(model, batch_sizes, num_trials=100)
+print(f"End-to-end 平均推理時間: {avg_time:.6f} 秒")
+print(f"FPS: {fps:.2f}")
 
 # 進行推斷
 # 對圖片進行預處理
@@ -254,150 +244,6 @@ def infer(model, image_path):
         output = model(image)  # 將圖片傳遞給模型
     return output
 
-# image_path = "/home/welly/test/HandMesh/cmr/images/061826k/00000000.jpg"
-# output = infer(model, image_path)
-
-# 根據需要進行處理
-# print(output['joint_img'])
-
-# 載入模型權重
-#weight = torch.load(os.path.join('./mobrecon/out/quantized_model_v0.pth'), map_location=torch.device('cpu'))
-#weight = torch.load(os.path.join('./mobrecon/out/MNIST_quantize_model_weight.pth'))
-weight = torch.load(os.path.join('./mobrecon/out/densestack.pth'))
-#weight = torch.load(os.path.join('./mobrecon/out/densestack_quantized_int8.pth'))
-
-# 初始化內存計算
-memory_int32 = 0
-memory_float32 = 0
-memory_int64 = 0
-memory_float64 = 0
-memory_int8 = 0
-
-# 遍歷所有張量
-for name, tensor in weight.items():
-    if isinstance(tensor, torch.Tensor):
-        if tensor.dtype == torch.int32:
-            memory_int32 += tensor.numel() * 4
-        elif tensor.dtype == torch.float32:
-            memory_float32 += tensor.numel() * 4
-        elif tensor.dtype == torch.int64:
-            memory_int64 += tensor.numel() * 8
-        elif tensor.dtype == torch.float64:
-            memory_float64 += tensor.numel() * 8
-        elif tensor.dtype == torch.int8:
-            memory_int8 += tensor.numel()
-        elif tensor.dtype == torch.qint8:
-            memory_int8 += tensor.numel()
-    else:
-        print(f'{name} is not a tensor, it is of type {type(tensor)}')
-
-# # 打印每種數據類型的內存佔用
-# print(f"int32 memory: {memory_int32 / (1024**2)} MB")
-# print(f"float32 memory: {memory_float32 / (1024**2)} MB")
-# print(f"int64 memory: {memory_int64 / (1024**2)} MB")
-# print(f"float64 memory: {memory_float64 / (1024**2)} MB")
-# print(f"int8 memory: {memory_int8 / (1024**2)} MB")
-
-# 總內存佔用
-total_memory = memory_int32 + memory_float32 + memory_int64 + memory_float64 + memory_int8
-print(f"Total memory: {total_memory / (1024**2)} MB")
-
-buffer_size=0
-# 遍歷模型的所有緩衍區（buffers）並計算它們的大小
-for buffer in model.buffers():
-    buffer_size += buffer.nelement() * buffer.element_size()
-
-# 計算模型的總大小（參數大小 + 緩衝區大小）
-size_all_mb = (total_memory + buffer_size) / 1024**2  # 轉換為MB
-print('Memory size: {:.3f} MB'.format(size_all_mb))
-
-
-
-model_summary = summary(model, input_size=(1, 6, 128, 128), col_names=[ "num_params", "input_size","output_size", "kernel_size"], verbose=0)
-
-# 用來存放結果的列表
-summary_data = []
-Total_MACs = 0
-
-# 初始化全域變數
-max_params = 0
-max_params_layer_name = ""
-
-# 尋找最大的輸入和輸出大小
-max_input_layer_name = ""
-max_output_layer_name = ""
-
-input_max_tensor_size = 0
-input_max_tensor_info = ""
-
-output_max_tensor_size = 0
-output_max_tensor_info = ""
-
-layers = model_summary.summary_list
-
-handle_collection=[]
-for layer in layers:
-    inner_layers = layer.inner_layers
-    layer_ids = [layer.layer_id]
-    
-    if layer.layer_id in handle_collection:
-        continue
-    handle_collection.append(layer.layer_id)
-
-    if layer.is_leaf_layer:
-        param_count = layer.trainable_params  # 獲取參數量，使用 trainable_params
-        MACs = layer.macs
-        Total_MACs += MACs
-        if param_count > max_params:
-            max_params = param_count
-            max_params_layer_name = layer.class_name
-    else:
-        param_count=0
-        MACs = 0
-    input_shape = layer.input_size  # 獲取輸入大小
-    output_shape = layer.output_size  # 獲取輸出大小         
-
-    # 計算 input tensor size 和 output tensor size
-    input_tensor_size = torch.tensor([*input_shape]).prod().item()  # 乘積計算
-    output_tensor_size = torch.tensor([*output_shape]).prod().item()  # 乘積計算
-
-    # 更新最大輸入大小、最大張量大小和對應的層類型
-    if input_tensor_size > input_max_tensor_size:
-        input_max_tensor_size = input_tensor_size
-        input_max_tensor_info = f"Layer: {layer.class_name}, input_shape:{input_shape}"
-
-    # 更新最大輸出大小、最大張量大小和對應的層類型
-    if output_tensor_size > output_max_tensor_size:
-        output_max_tensor_size = output_tensor_size
-        output_max_tensor_info = f"Layer: {layer.class_name}, onput_shape:{output_shape}"
-
-    summary_data.append({
-        'Layer': layer.class_name,
-        'Input Size': input_shape,
-        'Output Size': output_shape,
-        'Input Tensor': input_tensor_size,
-        'Output Tensor': output_tensor_size,
-        'Kernel Size': layer.kernel_size,
-        'Params': param_count,
-        'MACs': MACs
-    })
-    
-# 計算 FLOPs 和參數
-model = model.to(device)
-input = input.to(device)
-flops, params = profile(model, inputs=(input,))
-flops, params = clever_format([flops, params], "%.3f")
-
-input_max_tensor_size = clever_format([input_max_tensor_size], "%.3f")
-output_max_tensor_size = clever_format([output_max_tensor_size], "%.3f")
-max_params = clever_format([max_params], "%.3f")
-Total_MACs = clever_format([Total_MACs], "%.3f")
-print("===========================================================================================================================================================")
-print(f"FLOPs: {flops}, Params: {params}, Total mult-adds: {Total_MACs}")
-print(f"最大層參數量類型: {max_params_layer_name}, 參數量: {max_params}")
-print(f"Peak input-tensor size: {input_max_tensor_size}, {input_max_tensor_info}")
-print(f"Peak output-tensor size: {output_max_tensor_size}, {output_max_tensor_info}")
-
 
 print("計算backbone")
 # 提取 backbone 模組
@@ -414,15 +260,10 @@ input_backbone = input_backbone.to(device)
 # 檢查模型是否運行正常
 backbone.eval()  # 切換到推論模式
 
-avg_time, fps, p50 = benchmark_inference(backbone, input_backbone, device, warmup=10, num_tests=num_tests)
+avg_time, fps = backbone_benchmark_inference(backbone, batch_sizes, num_trials=100)
 
 print(f"backbone平均推理時間: {avg_time:.6f} 秒")
-print(f"FPS: {fps:.2f}({p50:.2f})")
-flops_backbone, params_backbone = profile(backbone, inputs=(input_backbone,))
-flops_backbone = 2*flops_backbone
-flops_backbone, params_backbone = clever_format([flops_backbone, params_backbone], "%.3f")
-# 打印結果
-print(f"Backbone FLOPs: {flops_backbone}, Params: {params_backbone}")
+print(f"FPS: {fps:.2f}")
 
 
 print("計算decoder3d")
@@ -440,16 +281,7 @@ x = x.to(device)
 
 # 檢查模型是否運行正常
 decoder3d.eval()  # 切換到推論模式
-avg_time, fps, p50 = benchmark_inference(decoder3d, (uv, x), device, warmup=10, num_tests=num_tests)
+avg_time, fps = decoder3d_benchmark_inference(decoder3d, batch_sizes, num_trials=100)
 
 print(f"Decoder平均推理時間: {avg_time:.6f} 秒")
-print(f"FPS: {fps:.2f}({p50:.2f})")
-
-flops_decoder3d, params_decoder3d = profile(decoder3d, inputs=(uv, x))
-flops_decoder3d = flops_decoder3d   # 2*flops_decoder3d
-flops_decoder3d, params_decoder3d = clever_format([flops_decoder3d, params_decoder3d], "%.3f")
-
-# 打印結果
-print(f"Decoder3D FLOPs: {flops_decoder3d}, Params: {params_decoder3d}")
-print(decoder3d)
-print("--------------------------------------------------------------------------------")
+print(f"FPS: {fps:.2f}")
