@@ -3,7 +3,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import torch.nn as nn
 import torch
-from mobrecon.models.densestack import DenseStack_Backnone
+from mobrecon.models.densestack import DenseStack_Backnone, EdgeFriendlyBackbone
 from mobrecon.models.modules import Reg2DDecode3D
 from mobrecon.models.loss import l1_loss, normal_loss, edge_length_loss, contrastive_loss_3d, contrastive_loss_2d
 from utils.read import spiral_tramsform
@@ -53,17 +53,12 @@ class MobRecon_DS(nn.Module):
         """
         super(MobRecon_DS, self).__init__()
         self.cfg = cfg
-
-        # 2D encoding - backbone
-        self.backbone = DenseStack_Backnone(latent_size=cfg.MODEL.LATENT_SIZE,
-                                            kpts_num=cfg.MODEL.KPTS_NUM)
-        
-        # 獲取當前執行 Python 腳本所在的目錄路徑
+        # self.backbone = DenseStack_Backnone(latent_size=cfg.MODEL.LATENT_SIZE,
+        #                                     kpts_num=cfg.MODEL.KPTS_NUM)
+        self.backbone = EdgeFriendlyBackbone()
         cur_dir = os.path.dirname(os.path.realpath(__file__))
-        template_fp = os.path.join(cur_dir, 'template/template.ply')
-        transform_fp = os.path.join(cur_dir, 'template', 'transform.pkl')
-
-        # 生成、載入或處理與「螺旋結構」相關的轉換矩陣（transform matrices）和索引資料，主要用於 3D 網格（如手部模型）的處理
+        template_fp = os.path.join(cur_dir, '../../template/template.ply')
+        transform_fp = os.path.join(cur_dir, '../../template', 'transform.pkl')
         spiral_indices, _, up_transform, tmp = spiral_tramsform(transform_fp,
                                                                 template_fp,
                                                                 cfg.MODEL.SPIRAL.DOWN_SCALE,
@@ -71,28 +66,15 @@ class MobRecon_DS(nn.Module):
                                                                 cfg.MODEL.SPIRAL.DILATION)
         for i in range(len(up_transform)):
             up_transform[i] = (*up_transform[i]._indices(), up_transform[i]._values())
-        
-        if cfg.MODEL.SPIRAL.TYPE == 'DSConv':
-            meshconv = DSConv
-        elif cfg.MODEL.SPIRAL.TYPE == 'Conv':
-            meshconv = SpiralConv
-        elif cfg.MODEL.SPIRAL.TYPE == 'Fast':
-            meshconv = FasterSpiralConv
-        else:
-            raise ValueError(f"Unknown SPIRAL.TYPE: {cfg.MODEL.SPIRAL.TYPE}")
-
-        # 2D lifting to 3D + 3D decoder
         self.decoder3d = Reg2DDecode3D(cfg.MODEL.LATENT_SIZE, 
                                        cfg.MODEL.SPIRAL.OUT_CHANNELS, 
                                        spiral_indices, 
                                        up_transform, 
                                        cfg.MODEL.KPTS_NUM,
-                                        meshconv=FasterSpiralConv)
-                                    #    meshconv=SupFastSpiralConv)
-                                    #    meshconv=SpiralConv)         # full + index_select
-                                    #    meshconv=SpiralConvGather)   # full + gather
-                                    #    meshconv=SpiralConvPartial)  # 1/4 + index_select
-        print(f"SPIRAL.TYPE is: {cfg.MODEL.SPIRAL.TYPE}")
+                                       meshconv=FasterSpiralConv)    # new version
+                                    #    meshconv=SpiralConv) 
+                                        # meshconv=DSConv)               # our benchmark
+                                    #    meshconv=(SpiralConv, DSConv)[cfg.MODEL.SPIRAL.TYPE=='DSConv'])
 
     def forward(self, x):
         if x.size(1) == 6:
