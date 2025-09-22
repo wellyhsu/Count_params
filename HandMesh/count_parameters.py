@@ -111,7 +111,7 @@ def model_benchmark_inference(model, batch_sizes, num_trials=20, after_quant=Tru
         print(f"Because not after quantization, set device back to: {device}")
         model.to(device)
         model.eval()
-    avg_time = sum(avg_time_list) / num_trials
+    avg_time = avg_time_list
     fps = 1 / avg_time
     return avg_time, fps
 
@@ -152,7 +152,7 @@ def backbone_benchmark_inference(model, batch_sizes, num_trials=20, after_quant=
                 print(f"Because not after quantization, set device back to: {device}")
                 model.to(device)
                 model.eval()
-    avg_time = sum(avg_time_list) / num_trials
+    avg_time = avg_time_list
     fps = 1 / avg_time
     return avg_time, fps
 
@@ -187,7 +187,7 @@ def decoder3d_benchmark_inference(model, batch_sizes, num_trials=20, after_quant
                 print(f"Because not after quantization, set device back to: {device}")
                 model.to(device)
                 model.eval()
-    avg_time = sum(avg_time_list) / num_trials
+    avg_time = avg_time_list
     fps = 1 / avg_time
     return avg_time, fps
 
@@ -282,5 +282,6 @@ avg_time, fps = decoder3d_benchmark_inference(decoder3d, batch_sizes, num_trials
 
 print(f"Decoder平均推理時間: {avg_time:.6f} 秒")
 print(f"FPS: {fps:.2f}")
+
 
 
