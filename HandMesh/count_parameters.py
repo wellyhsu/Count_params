@@ -128,18 +128,18 @@ def backbone_benchmark_inference(model, batch_sizes, num_trials=20, after_quant=
             # timer = benchmark.Timer(
             #     stmt="model_backbone(input_tensor)",  # 避免 self 出錯
             #     setup="pass",
-            #     globals={"model_backbone": model.backbone, "input_tensor": sample_input}
+            #     globals={"model_backbone": model, "input_tensor": sample_input}
             # )
             timer = benchmark.Timer(
                 stmt="out_0, out_1 = model_backbone(input_tensor)",  # 加上解包
                 setup="pass",
-                globals={"model_backbone": model.backbone, "input_tensor": sample_input}
+                globals={"model_backbone": model, "input_tensor": sample_input}
             )
 
 
             # 預熱 (warm-up) 避免初次運行影響
             for _ in range(5):
-                out_0, out_1 = model.backbone(sample_input) 
+                out_0, out_1 = model(sample_input) 
             # 執行多次測量，獲取統計結果
             results = timer.timeit(num_trials)  # 測試 num_trials 次
             # 顯示結果
@@ -170,11 +170,11 @@ def decoder3d_benchmark_inference(model, batch_sizes, num_trials=20, after_quant
             timer = benchmark.Timer(
                 stmt="model_decoder3d(*input_tensor)",  # 避免 self 出錯
                 setup="pass",
-                globals={"model_decoder3d": model.decoder3d, "input_tensor": sample_input}
+                globals={"model_decoder3d": model, "input_tensor": sample_input}
             )
             # 預熱 (warm-up) 避免初次運行影響
             for _ in range(5):
-                _ = model.decoder3d(pred2d_pt, latent) 
+                _ = model(pred2d_pt, latent) 
             # 執行多次測量，獲取統計結果
             results = timer.timeit(num_trials)  # 測試 num_trials 次
             # 顯示結果
@@ -282,4 +282,5 @@ avg_time, fps = decoder3d_benchmark_inference(decoder3d, batch_sizes, num_trials
 
 print(f"Decoder平均推理時間: {avg_time:.6f} 秒")
 print(f"FPS: {fps:.2f}")
+
 
