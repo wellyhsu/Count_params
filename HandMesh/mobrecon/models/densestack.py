@@ -352,6 +352,14 @@ class EdgeFriendlyBackbone(nn.Module):
                 nn.BatchNorm2d(out_c),
                 nn.ReLU(inplace=True)
             )
+        
+        def conv1x1_bn_relu(in_c, out_c):
+            return nn.Sequential(
+                nn.Conv2d(in_c, out_c, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(out_c),
+                nn.ReLU(inplace=True)
+            )
+        
 
         # 通道數設定：依照規則，Ch_out=512 => Ch_in <= 48，Ch_out <= 256 => Ch_in <= 112
         self.stage1 = nn.Sequential(
@@ -368,42 +376,45 @@ class EdgeFriendlyBackbone(nn.Module):
 
         self.stage3 = nn.Sequential(
             conv_bn_relu(112, 256),
-            conv_bn_relu(256, 256),
+            conv1x1_bn_relu(256, 112),
+            conv_bn_relu(112, 256),
             nn.MaxPool2d(2)       # -> 16x16x256
         )
 
         self.stage4 = nn.Sequential(
-            conv_bn_relu(256, 512),
-            conv_bn_relu(512, 512),
-            nn.MaxPool2d(2)       # -> 8x8x512
+            conv1x1_bn_relu(256, 48),
+            conv_bn_relu(48, 512),
+            conv1x1_bn_relu(512, 48),
+            conv_bn_relu(48, 512),
+            nn.MaxPool2d(2)   # -> 8×8×512
+        )
+
+        self.stage5 = nn.Sequential(
+            conv1x1_bn_relu(512, 48),
+            conv_bn_relu(48, 512),
+            conv1x1_bn_relu(512, 48),
+            conv_bn_relu(48, 512),
+            nn.MaxPool2d(2)             # -> 4×4×512
         )
 
         self.conv_branch3 = nn.Sequential(
-            conv_bn_relu(512, 512),
-            conv_bn_relu(512, 256),  # -> 8x8x256
-            nn.MaxPool2d(2)  # 加這行：8x8 → 4x4
-        )
+            conv1x1_bn_relu(512, 112),
+            conv_bn_relu(112, 256),
+        )  # -> 4×4×256
 
-        self.conv_branch4 = nn.Sequential(
-            conv_bn_relu(512, 256, kernel_size=3, stride=2, padding=1),  # -> 4x4x256
-            nn.Conv2d(256, kpts_num, kernel_size=1)                      # -> 4x4x21
-        )
+        self.head_proj = nn.Conv2d(256, kpts_num, kernel_size=1)
 
-        # self.fc = nn.Linear(4, 2)  # for each keypoint: 4 values to 2D regression
         self.fc = nn.Linear(16, 2)  # for each keypoint: 4 values to 2D regression
+
 
     def forward(self, x):
         x = self.stage1(x)
         x = self.stage2(x)
         x = self.stage3(x)
         x = self.stage4(x)
-
-        latent = self.conv_branch3(x)  # shape: (B, 256, 8, 8)
-
-        uv_reg = self.conv_branch4(x)  # shape: (B, 21, 4, 4)
-        uv_reg = uv_reg.contiguous().reshape(uv_reg.shape[0], uv_reg.shape[1], -1)
-        uv_reg = self.fc(uv_reg)
-
-        # print(f"uv_reg: {uv_reg.shape}")
-        # print(f"latent: {latent.shape}")
+        x = self.stage5(x)   # 4x4x512
+        latent = self.conv_branch3(x) # (B,256,4,4)
+        uv_reg = self.head_proj(latent) # (B,kpts,4,4)
+        uv_reg = uv_reg.contiguous().reshape(uv_reg.shape[0], uv_reg.shape[1], -1)# (B,kpts,16)
+        uv_reg = self.fc(uv_reg) # (B,kpts,2)
         return latent, uv_reg
