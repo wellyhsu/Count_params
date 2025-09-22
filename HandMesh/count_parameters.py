@@ -8,10 +8,7 @@ from mobrecon.models.modules import Reg2DDecode3D
 from mobrecon.models.loss import l1_loss, normal_loss, edge_length_loss, contrastive_loss_3d, contrastive_loss_2d
 from utils.read import spiral_tramsform
 from conv.spiralconv import SpiralConv
-from conv.fasterspiralconv_oringinal import FasterSpiralConv, fast_spiral_gather  # torch.gather + 1/4
-from conv.SupFastSpiralConv import SupFastSpiralConv  # newest
-from conv.fasterspiralconv_oringinal import SpiralConvGather    # torch.gather + full
-from conv.fasterspiralconv_oringinal import SpiralConvPartial   # index_select+1/4
+from conv.fasterspiralconv import FasterSpiralConv, fast_spiral_gather  # torch.gather + 1/4
 
 from conv.dsconv import DSConv
 from mobrecon.build import MODEL_REGISTRY
@@ -285,3 +282,4 @@ avg_time, fps = decoder3d_benchmark_inference(decoder3d, batch_sizes, num_trials
 
 print(f"Decoder平均推理時間: {avg_time:.6f} 秒")
 print(f"FPS: {fps:.2f}")
+
